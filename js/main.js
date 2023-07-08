@@ -8,34 +8,114 @@ function guardarProductos(productos) {
   localStorage.setItem("productos", productosJSON);
 }
 
-function seleccionarProducto(productos) {
+function mostrarOpcionesProductos(productos) {
   let mensaje = "Opciones de productos:\n";
   productos.forEach((producto, index) => {
     mensaje += `${index + 1}. ${producto.nombre}\n`;
-});
-
-  let numero = parseInt(prompt(`${mensaje}\nIngrese el número del producto que desea comprar (1, 2, 3), presione 0 si desea salir:`));
-
-  while (numero < 0 || numero > productos.length) {
-    alert("Número inválido. Intente nuevamente.");
-    numero = parseInt(prompt(`${mensaje}\nIngrese el número del producto que desea comprar (1, 2, 3):`));
-  }
-
-  if (numero === 0) {
-    return null;
-  }
-
-  return productos[numero - 1];
+  });
+  return mensaje;
 }
 
-function ingresarCantidad(productoSeleccionado) {
-  let cantidad = parseInt(prompt(`Ingrese la cantidad de ${productoSeleccionado.nombre} que desea comprar:`));
+function mostrarMensajeError(mensaje) {
+  const mensajeError = document.createElement("p");
+  mensajeError.innerText = mensaje;
+  document.getElementById("resultado").appendChild(mensajeError);
+}
 
-  while (isNaN(cantidad) || cantidad <= 0) {
-    cantidad = parseInt(prompt("Cantidad inválida. Ingrese la cantidad de productos que desea comprar:"));
-  }
+function limpiarResultado() {
+  document.getElementById("resultado").innerHTML = "";
+}
 
-  productoSeleccionado.cantidad = cantidad;
+function mostrarSeleccionProducto(productos) {
+  limpiarResultado();
+  const mensajeOpciones = mostrarOpcionesProductos(productos);
+  const mensajeSeleccion = document.createElement("p");
+  mensajeSeleccion.innerText = mensajeOpciones;
+  document.getElementById("resultado").appendChild(mensajeSeleccion);
+
+  const inputNumero = document.createElement("input");
+  inputNumero.type = "number";
+  inputNumero.min = 0;
+  inputNumero.max = productos.length;
+  document.getElementById("resultado").appendChild(inputNumero);
+
+  const botonConfirmar = document.createElement("button");
+  botonConfirmar.innerText = "Confirmar";
+  document.getElementById("resultado").appendChild(botonConfirmar);
+
+  botonConfirmar.addEventListener("click", () => {
+    const numero = parseInt(inputNumero.value);
+    if (numero >= 0 && numero <= productos.length) {
+      if (numero === 0) {
+        const productosSeleccionados = obtenerProductosSeleccionados(productos);
+        if (productosSeleccionados.length > 0) {
+          const mensajeFinal = generarMensajeFinal(productosSeleccionados);
+          mostrarResultado(mensajeFinal);
+          mostrarBotonVolver(productos);
+        } else {
+          mostrarMensajeError("No se ha seleccionado ningún producto.");
+        }
+      } else {
+        const producto = productos[numero - 1];
+        mostrarIngresarCantidad(producto, productos);
+      }
+    } else {
+      mostrarMensajeError("Número inválido. Intente nuevamente.");
+    }
+  });
+}
+
+function mostrarIngresarCantidad(productoSeleccionado, productos) {
+  return new Promise((resolve, reject) => {
+    limpiarResultado();
+    const mensajeCantidad = document.createElement("p");
+    mensajeCantidad.innerText = `Ingrese la cantidad de ${productoSeleccionado.nombre} que desea comprar:`;
+    document.getElementById("resultado").appendChild(mensajeCantidad);
+
+    const inputCantidad = document.createElement("input");
+    inputCantidad.type = "number";
+    inputCantidad.min = 1;
+    document.getElementById("resultado").appendChild(inputCantidad);
+
+    const botonConfirmar = document.createElement("button");
+    botonConfirmar.innerText = "Confirmar";
+    document.getElementById("resultado").appendChild(botonConfirmar);
+
+    botonConfirmar.addEventListener("click", () => {
+      const cantidad = parseInt(inputCantidad.value);
+      if (cantidad > 0) {
+        productoSeleccionado.cantidad = cantidad;
+
+        fetch('http://127.0.0.1:5500/compraonline.html', {
+          method: 'POST',
+          body: JSON.stringify(productoSeleccionado),
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        .then(response => {
+          mostrarSeleccionProducto(productos);
+          resolve();
+        })
+        .catch(error => {
+          reject(error); 
+        });
+      } else {
+        const error = new Error("Cantidad inválida. Ingrese la cantidad de productos que desea comprar.");
+        reject(error);
+      }
+    });
+  });
+}
+
+function obtenerProductosSeleccionados(productos) {
+  const productosSeleccionados = [];
+  productos.forEach((producto) => {
+    if (producto.cantidad > 0) {
+      productosSeleccionados.push(producto);
+    }
+  });
+  return productosSeleccionados;
 }
 
 function calcularCuota(precio, cuotas, conInteres) {
@@ -46,24 +126,36 @@ function calcularCuota(precio, cuotas, conInteres) {
   return cuota;
 }
 
+function calcularTotal(productosSeleccionados) {
+  let total = 0;
+  productosSeleccionados.forEach((productoSeleccionado) => {
+    const subtotal = productoSeleccionado.precio * productoSeleccionado.cantidad;
+    total += subtotal;
+  });
+  return total;
+}
+
+function generarMensajeCuotas(productoSeleccionado) {
+  let mensajeCuotas = "";
+  const precioProducto = productoSeleccionado.precio;
+  const cantidad = productoSeleccionado.cantidad;
+
+  mensajeCuotas += `Cuotas con interés para ${cantidad} ${productoSeleccionado.nombre}:\n`;
+  [6, 12].forEach((cuotas) => {
+    const cuota = calcularCuota(precioProducto, cuotas, true);
+    mensajeCuotas += `${cuotas} cuotas: $${cuota.toFixed(2)}\n`;
+  });
+
+  return mensajeCuotas;
+}
+
 function generarMensajeFinal(productosSeleccionados) {
   let mensajeFinal = "";
-  let total = 0;
+  const total = calcularTotal(productosSeleccionados);
 
   productosSeleccionados.forEach((productoSeleccionado) => {
-    const precioProducto = productoSeleccionado.precio;
-    const cantidad = productoSeleccionado.cantidad;
-
-    mensajeFinal += `Cuotas con interés para ${cantidad} ${productoSeleccionado.nombre}:\n`;
-    [6, 12].forEach((cuotas) => {
-      const cuota = calcularCuota(precioProducto, cuotas, true);
-      mensajeFinal += `${cuotas} cuotas: $${cuota.toFixed(2)}\n`;
-    });
-
-    mensajeFinal += "\n";
-
-    const subtotal = precioProducto * cantidad;
-    total += subtotal;
+    const mensajeCuotas = generarMensajeCuotas(productoSeleccionado);
+    mensajeFinal += mensajeCuotas + "\n";
   });
 
   mensajeFinal += `Total de la compra: $${total.toFixed(2)}\n`;
@@ -77,25 +169,32 @@ function generarMensajeFinal(productosSeleccionados) {
   return mensajeFinal;
 }
 
-function mostrarCuotas() {
-  const productos = [
-    { nombre: "Producto 1", precio: 1000 },
-    { nombre: "Producto 2", precio: 2000 },
-    { nombre: "Producto 3", precio: 3000 }
-  ];
-
-  const productosSeleccionados = [];
-
-  let producto = seleccionarProducto(productos);
-  while (producto) {
-    ingresarCantidad(producto);
-    productosSeleccionados.push(producto);
-    producto = seleccionarProducto(productos);
-  }
-
-  const mensajeFinal = generarMensajeFinal(productosSeleccionados);
-
-  document.getElementById("resultado").innerText = mensajeFinal;
+function mostrarResultado(mensaje) {
+  limpiarResultado();
+  const mensajeResultado = document.createElement("p");
+  mensajeResultado.innerText = mensaje;
+  document.getElementById("resultado").appendChild(mensajeResultado);
 }
 
-document.addEventListener("DOMContentLoaded", mostrarCuotas);
+function mostrarBotonVolver(productos) {
+  const botonVolver = document.createElement("button");
+  botonVolver.innerText = "Volver a comprar";
+  document.getElementById("resultado").appendChild(botonVolver);
+
+  botonVolver.addEventListener("click", () => {
+    limpiarResultado();
+    mostrarSeleccionProducto(productos);
+  });
+}
+
+function mostrarCuotas() {
+  const productos = [
+    { nombre: "Producto 1", precio: 1000, cantidad: 0 },
+    { nombre: "Producto 2", precio: 2000, cantidad: 0 },
+    { nombre: "Producto 3", precio: 3000, cantidad: 0 }
+  ];
+
+  mostrarSeleccionProducto(productos);
+}
+
+mostrarCuotas();
